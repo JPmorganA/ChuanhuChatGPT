@@ -1,54 +1,51 @@
-name: Build and push Docker image
+name: image
 
 on:
-  push:
-    branches:
-      - "main"
+  workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
-  docker:
+  push_to_registry:
+    name: Push Docker image to Docker Hub
     runs-on: ubuntu-latest
     steps:
       -
-        name: Checkout
+        name: Check out the repo
         uses: actions/checkout@v3
-      - 
-        name: Set release date
-        run: |
-          echo "RELEASE_DATE=$(date +%y.%m.%d)" >> ${GITHUB_ENV}
       -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      -
-        name: Login to Docker Hub
+        name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+      
+      - 
+        name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.MY_TOKEN }}
-      -
-        name: Owner names
-        run: |
-          GITOWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')
-          echo "GITOWNER=$GITOWNER" >> ${GITHUB_ENV}
-      -
-        name: Build and push
+          images: assassinh/ChuanhuChatGPT
+          tags: |
+            type=raw,value=latest
+            type=ref,event=tag
+      
+      - 
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - 
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - 
+        name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
-          tags: |
-            ghcr.io/${{ env.GITOWNER }}/chuanhuchatgpt:latest
-            ghcr.io/${{ env.GITOWNER }}/chuanhuchatgpt:${{ env.RELEASE_DATE }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/chuanhuchatgpt:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/chuanhuchatgpt:${{ env.RELEASE_DATE }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
